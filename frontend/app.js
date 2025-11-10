@@ -16,7 +16,6 @@ const logsBody = document.querySelector("#logs-body");
 const proxyForm = document.querySelector("#proxy-form");
 const proxyTargetInput = document.querySelector("#proxy-target");
 const refreshLogsButton = document.querySelector("#refresh-logs");
-const downloadLogsButton = document.querySelector("#download-logs");
 const autoRefreshCheckbox = document.querySelector("#auto-refresh");
 const shutdownButton = document.querySelector("#shutdown-button");
 const logTemplate = document.querySelector("#log-row-template");
@@ -73,80 +72,25 @@ function populateMockForm(mock) {
   editorTitle.textContent = "Edit mock";
 }
 
-function getStatusBadgeClass(status) {
-  if (status >= 200 && status < 300) {
-    return "status-success";
-  }
-  if (status >= 300 && status < 400) {
-    return "status-warning";
-  }
-  if (status >= 400) {
-    return "status-error";
-  }
-  return "";
-}
-
-function getSourceBadgeClass(source) {
-  const normalized = (source || "").toLowerCase();
-  if (normalized.includes("mock")) {
-    return "source-mock";
-  }
-  if (normalized.includes("proxy")) {
-    return "source-proxy";
-  }
-  return "source-live";
-}
-
 function createMockRow(mock) {
   const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td>${mock.method}</td>
+    <td><code>${mock.path}</code></td>
+    <td>${mock.status_code}</td>
+    <td>${mock.delay_ms}</td>
+    <td class="table-actions">
+      <button data-action="edit">Edit</button>
+      <button data-action="delete" class="secondary">Delete</button>
+    </td>
+  `;
 
-  const methodCell = document.createElement("td");
-  const methodPill = document.createElement("span");
-  const method = (mock.method || "").toUpperCase();
-  methodPill.className = `method-pill ${method}`.trim();
-  methodPill.textContent = method;
-  methodCell.appendChild(methodPill);
-  tr.appendChild(methodCell);
-
-  const pathCell = document.createElement("td");
-  const pathCode = document.createElement("code");
-  pathCode.textContent = mock.path;
-  pathCell.appendChild(pathCode);
-  tr.appendChild(pathCell);
-
-  const statusCell = document.createElement("td");
-  const statusBadge = document.createElement("span");
-  statusBadge.className = `badge ${getStatusBadgeClass(mock.status_code)}`.trim();
-  statusBadge.textContent = mock.status_code;
-  statusCell.appendChild(statusBadge);
-  tr.appendChild(statusCell);
-
-  const delayCell = document.createElement("td");
-  delayCell.textContent = mock.delay_ms ?? 0;
-  tr.appendChild(delayCell);
-
-  const actionsCell = document.createElement("td");
-  actionsCell.classList.add("table-actions");
-
-  const editButton = document.createElement("button");
-  editButton.dataset.action = "edit";
-  editButton.textContent = "Edit";
-  actionsCell.appendChild(editButton);
-
-  const deleteButton = document.createElement("button");
-  deleteButton.dataset.action = "delete";
-  deleteButton.classList.add("secondary");
-  deleteButton.textContent = "Delete";
-  actionsCell.appendChild(deleteButton);
-
-  tr.appendChild(actionsCell);
-
-  editButton.addEventListener("click", () => {
+  tr.querySelector('[data-action="edit"]').addEventListener("click", () => {
     populateMockForm(mock);
     window.scrollTo({ top: mockForm.offsetTop - 20, behavior: "smooth" });
   });
 
-  deleteButton.addEventListener("click", async () => {
+  tr.querySelector('[data-action="delete"]').addEventListener("click", async () => {
     if (!confirm(`Delete mock ${mock.method} ${mock.path}?`)) {
       return;
     }
@@ -178,74 +122,29 @@ function formatTimestamp(value) {
   return date.toISOString().replace("T", " ").replace("Z", "");
 }
 
+function renderLog(entry) {
+  const fragment = logTemplate.content.cloneNode(true);
+  fragment.querySelector(".log-time").textContent = formatTimestamp(entry.timestamp);
+  fragment.querySelector(".log-method").textContent = entry.method;
+  fragment.querySelector(".log-path").textContent = entry.path;
+  fragment.querySelector(".log-status").textContent = entry.status_code;
+  fragment.querySelector(".log-source").textContent = entry.source;
+  fragment.querySelector(".log-request-headers").textContent = JSON.stringify(entry.request_headers || {}, null, 2);
+  fragment.querySelector(".log-request-body").textContent = entry.request_body || "";
+  fragment.querySelector(".log-response-headers").textContent = JSON.stringify(entry.response_headers || {}, null, 2);
+  fragment.querySelector(".log-response-body").textContent = entry.response_body || "";
+  return fragment;
+}
+
 async function loadLogs() {
   try {
     const entries = await fetchJson("/logs");
-    const existingRows = new Map(
-      Array.from(logsBody.querySelectorAll("tr[data-log-id]")).map((row) => [row.dataset.logId, row]),
-    );
-    const fragment = document.createDocumentFragment();
-
-    entries.forEach((entry) => {
-      const id = String(entry.id);
-      let row = existingRows.get(id);
-      if (row) {
-        existingRows.delete(id);
-      } else {
-        const clone = logTemplate.content.cloneNode(true);
-        row = clone.querySelector("tr");
-      }
-      updateLogRow(row, entry);
-      fragment.appendChild(row);
-    });
-
     logsBody.innerHTML = "";
-    logsBody.appendChild(fragment);
+    entries.forEach((entry) => {
+      logsBody.appendChild(renderLog(entry));
+    });
   } catch (error) {
     console.error("Failed to load logs", error);
-  }
-}
-
-function updateLogRow(row, entry) {
-  const details = row.querySelector("details");
-  const wasOpen = details?.open ?? false;
-
-  row.dataset.logId = String(entry.id);
-  row.querySelector(".log-time").textContent = formatTimestamp(entry.timestamp);
-
-  const methodPill = row.querySelector(".log-method .method-pill");
-  const method = (entry.method || "").toUpperCase();
-  methodPill.className = "method-pill";
-  if (method) {
-    methodPill.classList.add(method);
-  }
-  methodPill.textContent = method;
-
-  row.querySelector(".log-path code").textContent = entry.path;
-
-  const statusBadge = row.querySelector(".log-status .badge");
-  statusBadge.className = "badge";
-  statusBadge.textContent = entry.status_code;
-  const statusClass = getStatusBadgeClass(entry.status_code);
-  if (statusClass) {
-    statusBadge.classList.add(statusClass);
-  }
-
-  const sourceBadge = row.querySelector(".log-source .badge");
-  sourceBadge.className = "badge";
-  sourceBadge.textContent = entry.source;
-  const sourceClass = getSourceBadgeClass(entry.source);
-  if (sourceClass) {
-    sourceBadge.classList.add(sourceClass);
-  }
-
-  row.querySelector(".log-request-headers").textContent = JSON.stringify(entry.request_headers || {}, null, 2);
-  row.querySelector(".log-request-body").textContent = entry.request_body ?? "";
-  row.querySelector(".log-response-headers").textContent = JSON.stringify(entry.response_headers || {}, null, 2);
-  row.querySelector(".log-response-body").textContent = entry.response_body ?? "";
-
-  if (details) {
-    details.open = wasOpen;
   }
 }
 
@@ -327,24 +226,6 @@ proxyForm.addEventListener("submit", async (event) => {
 });
 
 refreshLogsButton.addEventListener("click", loadLogs);
-
-downloadLogsButton.addEventListener("click", async () => {
-  try {
-    const entries = await fetchJson("/logs");
-    const blob = new Blob([JSON.stringify(entries, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    anchor.download = `mock-server-logs-${timestamp}.json`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-  } catch (error) {
-    alert(error.message);
-  }
-});
 
 autoRefreshCheckbox.addEventListener("change", () => {
   if (autoRefreshCheckbox.checked) {
