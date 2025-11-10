@@ -93,8 +93,7 @@ def get_proxy_settings() -> ProxySettings:
 
 @api_router.post("/settings/proxy", response_model=ProxySettings)
 def set_proxy_settings(payload: ProxySettings) -> ProxySettings:
-    state.proxy_settings = payload
-    return state.proxy_settings
+    return state.update_proxy_settings(payload)
 
 
 @api_router.get("/info", response_model=ServerInfo)

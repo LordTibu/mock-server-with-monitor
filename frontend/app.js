@@ -6,7 +6,6 @@ const mockMethodInput = document.querySelector("#mock-method");
 const mockPathInput = document.querySelector("#mock-path");
 const mockStatusInput = document.querySelector("#mock-status");
 const mockDelayInput = document.querySelector("#mock-delay");
-const mockHeadersInput = document.querySelector("#mock-headers");
 const mockBodyInput = document.querySelector("#mock-body");
 const mockContentTypeInput = document.querySelector("#mock-content-type");
 const editorTitle = document.querySelector("#editor-title");
@@ -19,8 +18,14 @@ const refreshLogsButton = document.querySelector("#refresh-logs");
 const autoRefreshCheckbox = document.querySelector("#auto-refresh");
 const shutdownButton = document.querySelector("#shutdown-button");
 const logTemplate = document.querySelector("#log-row-template");
+const headersList = document.querySelector("#mock-headers-list");
+const headersEmpty = document.querySelector("#headers-empty");
+const addHeaderButton = document.querySelector("#add-header");
+const mockBodyJsonToggle = document.querySelector("#mock-body-json");
+const formatBodyButton = document.querySelector("#format-body");
 
 let autoRefreshInterval = null;
+const openLogDetails = new Set();
 
 async function fetchJson(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -43,21 +48,114 @@ function resetMockForm() {
   mockStatusInput.value = 200;
   mockDelayInput.value = 0;
   editorTitle.textContent = "Create mock";
+  headersList.innerHTML = "";
+  addHeaderRow();
+  mockBodyJsonToggle.checked = false;
+  delete mockContentTypeInput.dataset.autofill;
+  applyBodyJsonMode(false);
+  updateHeadersEmptyState();
 }
 
-function serializeHeaders(value) {
-  if (!value.trim()) {
-    return {};
+function updateHeadersEmptyState() {
+  const hasRows = headersList.querySelectorAll(".key-value-row").length > 0;
+  headersEmpty.hidden = hasRows;
+}
+
+function addHeaderRow(name = "", value = "") {
+  const row = document.createElement("div");
+  row.className = "key-value-row";
+
+  const keyInput = document.createElement("input");
+  keyInput.type = "text";
+  keyInput.placeholder = "Header name";
+  keyInput.className = "header-key";
+  keyInput.value = name;
+
+  const valueInput = document.createElement("input");
+  valueInput.type = "text";
+  valueInput.placeholder = "Header value";
+  valueInput.className = "header-value";
+  valueInput.value = value;
+
+  const removeButton = document.createElement("button");
+  removeButton.type = "button";
+  removeButton.textContent = "Remove";
+  removeButton.className = "secondary small";
+  removeButton.addEventListener("click", () => {
+    row.remove();
+    if (!headersList.querySelector(".key-value-row")) {
+      addHeaderRow();
+    }
+    updateHeadersEmptyState();
+  });
+
+  row.append(keyInput, valueInput, removeButton);
+  headersList.append(row);
+  updateHeadersEmptyState();
+  return row;
+}
+
+function collectHeaders() {
+  const headers = {};
+  headersList.querySelectorAll(".key-value-row").forEach((row) => {
+    const key = row.querySelector(".header-key").value.trim();
+    const value = row.querySelector(".header-value").value;
+    if (key) {
+      headers[key] = value;
+    }
+  });
+  return headers;
+}
+
+function shouldTreatBodyAsJson(contentType, body) {
+  if (contentType && contentType.toLowerCase().includes("json")) {
+    return true;
+  }
+  if (!body) {
+    return false;
   }
   try {
-    const parsed = JSON.parse(value);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed;
-    }
+    JSON.parse(body);
+    return true;
   } catch (error) {
-    console.error("Invalid headers JSON", error);
+    return false;
   }
-  throw new Error("Headers must be a JSON object");
+}
+
+function formatBodyAsJson({ silent = false } = {}) {
+  const bodyValue = mockBodyInput.value.trim();
+  if (!bodyValue) {
+    return true;
+  }
+  try {
+    const parsed = JSON.parse(bodyValue);
+    mockBodyInput.value = JSON.stringify(parsed, null, 2);
+    return true;
+  } catch (error) {
+    if (!silent) {
+      alert("Body is not valid JSON");
+    }
+    return false;
+  }
+}
+
+function applyBodyJsonMode(enabled) {
+  if (enabled) {
+    if (!mockContentTypeInput.value.trim()) {
+      mockContentTypeInput.value = "application/json";
+      mockContentTypeInput.dataset.autofill = "1";
+    }
+    const isValid = formatBodyAsJson({ silent: true });
+    mockBodyInput.setCustomValidity(
+      isValid ? "" : "Body must be valid JSON when the JSON option is enabled."
+    );
+  } else if (mockContentTypeInput.dataset.autofill === "1") {
+    mockContentTypeInput.value = "";
+    delete mockContentTypeInput.dataset.autofill;
+    mockBodyInput.setCustomValidity("");
+  } else {
+    mockBodyInput.setCustomValidity("");
+  }
 }
 
 function populateMockForm(mock) {
@@ -67,8 +165,21 @@ function populateMockForm(mock) {
   mockStatusInput.value = mock.status_code;
   mockDelayInput.value = mock.delay_ms ?? 0;
   mockContentTypeInput.value = mock.content_type ?? "";
-  mockHeadersInput.value = JSON.stringify(mock.headers || {}, null, 2);
+  delete mockContentTypeInput.dataset.autofill;
+  headersList.innerHTML = "";
+  const entries = Object.entries(mock.headers || {});
+  if (entries.length) {
+    entries.forEach(([key, value]) => {
+      addHeaderRow(key, value);
+    });
+  } else {
+    addHeaderRow();
+  }
+  const shouldFormatJson = shouldTreatBodyAsJson(mock.content_type, mock.body);
   mockBodyInput.value = mock.body ?? "";
+  mockBodyJsonToggle.checked = shouldFormatJson;
+  applyBodyJsonMode(shouldFormatJson);
+  updateHeadersEmptyState();
   editorTitle.textContent = "Edit mock";
 }
 
@@ -124,6 +235,8 @@ function formatTimestamp(value) {
 
 function renderLog(entry) {
   const fragment = logTemplate.content.cloneNode(true);
+  const row = fragment.querySelector("tr");
+  row.dataset.logId = entry.id;
   fragment.querySelector(".log-time").textContent = formatTimestamp(entry.timestamp);
   fragment.querySelector(".log-method").textContent = entry.method;
   fragment.querySelector(".log-path").textContent = entry.path;
@@ -133,12 +246,29 @@ function renderLog(entry) {
   fragment.querySelector(".log-request-body").textContent = entry.request_body || "";
   fragment.querySelector(".log-response-headers").textContent = JSON.stringify(entry.response_headers || {}, null, 2);
   fragment.querySelector(".log-response-body").textContent = entry.response_body || "";
+  const details = fragment.querySelector("details");
+  if (openLogDetails.has(entry.id)) {
+    details.open = true;
+  }
+  details.addEventListener("toggle", () => {
+    if (details.open) {
+      openLogDetails.add(entry.id);
+    } else {
+      openLogDetails.delete(entry.id);
+    }
+  });
   return fragment;
 }
 
 async function loadLogs() {
   try {
     const entries = await fetchJson("/logs");
+    const currentIds = new Set(entries.map((entry) => entry.id));
+    Array.from(openLogDetails).forEach((logId) => {
+      if (!currentIds.has(logId)) {
+        openLogDetails.delete(logId);
+      }
+    });
     logsBody.innerHTML = "";
     entries.forEach((entry) => {
       logsBody.appendChild(renderLog(entry));
@@ -172,14 +302,24 @@ async function loadProxySettings() {
 mockForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
-    const headers = serializeHeaders(mockHeadersInput.value || "{}");
+    const headers = collectHeaders();
+    const treatBodyAsJson = mockBodyJsonToggle.checked;
+    let bodyValue = mockBodyInput.value;
+    if (treatBodyAsJson && bodyValue.trim()) {
+      try {
+        bodyValue = JSON.stringify(JSON.parse(bodyValue), null, 2);
+        mockBodyInput.value = bodyValue;
+      } catch (error) {
+        throw new Error("Body must be valid JSON when the JSON option is enabled");
+      }
+    }
     const payload = {
       method: mockMethodInput.value,
       path: mockPathInput.value,
       status_code: Number(mockStatusInput.value),
       delay_ms: Number(mockDelayInput.value || 0),
       headers,
-      body: mockBodyInput.value,
+      body: bodyValue,
       content_type: mockContentTypeInput.value || null,
     };
 
@@ -210,6 +350,57 @@ resetFormButton.addEventListener("click", () => {
 newMockButton.addEventListener("click", () => {
   resetMockForm();
   window.scrollTo({ top: mockForm.offsetTop - 20, behavior: "smooth" });
+});
+
+addHeaderButton.addEventListener("click", () => {
+  const newRow = addHeaderRow();
+  const keyInput = newRow.querySelector(".header-key");
+  if (keyInput) {
+    keyInput.focus();
+  }
+});
+
+mockBodyJsonToggle.addEventListener("change", () => {
+  applyBodyJsonMode(mockBodyJsonToggle.checked);
+});
+
+formatBodyButton.addEventListener("click", () => {
+  const success = formatBodyAsJson();
+  if (success) {
+    mockBodyInput.setCustomValidity("");
+    if (!mockBodyJsonToggle.checked) {
+      mockBodyJsonToggle.checked = true;
+      applyBodyJsonMode(true);
+    }
+  } else if (mockBodyJsonToggle.checked) {
+    mockBodyInput.setCustomValidity(
+      "Body must be valid JSON when the JSON option is enabled."
+    );
+  }
+});
+
+mockContentTypeInput.addEventListener("input", () => {
+  delete mockContentTypeInput.dataset.autofill;
+});
+
+mockBodyInput.addEventListener("input", () => {
+  if (!mockBodyJsonToggle.checked) {
+    mockBodyInput.setCustomValidity("");
+    return;
+  }
+  const trimmed = mockBodyInput.value.trim();
+  if (!trimmed) {
+    mockBodyInput.setCustomValidity("");
+    return;
+  }
+  try {
+    JSON.parse(trimmed);
+    mockBodyInput.setCustomValidity("");
+  } catch (error) {
+    mockBodyInput.setCustomValidity(
+      "Body must be valid JSON when the JSON option is enabled."
+    );
+  }
 });
 
 proxyForm.addEventListener("submit", async (event) => {
@@ -247,6 +438,7 @@ shutdownButton.addEventListener("click", async () => {
   }
 });
 
+resetMockForm();
 loadProxySettings();
 loadMocks();
 loadLogs();
