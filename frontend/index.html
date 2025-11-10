@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mock Server Dashboard</title>
+  <link rel="stylesheet" href="/dashboard/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Mock Server Dashboard</h1>
+    <p>Manage mock routes, monitor traffic, and control proxy behavior.</p>
+  </header>
+
+  <main>
+    <section id="proxy-settings" class="card">
+      <h2>Proxy Settings</h2>
+      <form id="proxy-form">
+        <label for="proxy-target">Proxy target URL</label>
+        <input id="proxy-target" name="proxy-target" type="url" placeholder="https://example.com" />
+        <button type="submit">Save</button>
+      </form>
+      <p class="hint">When no mock matches a request, the server will forward it to this target.</p>
+    </section>
+
+    <section id="mocks" class="card">
+      <div class="section-header">
+        <h2>Mocked Routes</h2>
+        <button id="new-mock">New mock</button>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Path</th>
+              <th>Status</th>
+              <th>Delay (ms)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="mock-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="mock-editor" class="card">
+      <h2 id="editor-title">Create mock</h2>
+      <form id="mock-form">
+        <input type="hidden" id="mock-id" />
+        <div class="grid">
+          <label>
+            Method
+            <select id="mock-method" required>
+              <option>GET</option>
+              <option>POST</option>
+              <option>PUT</option>
+              <option>PATCH</option>
+              <option>DELETE</option>
+              <option>OPTIONS</option>
+              <option>HEAD</option>
+            </select>
+          </label>
+          <label>
+            Path
+            <input id="mock-path" type="text" placeholder="/api/users" required />
+          </label>
+          <label>
+            Status code
+            <input id="mock-status" type="number" min="100" max="599" value="200" required />
+          </label>
+          <label>
+            Delay (ms)
+            <input id="mock-delay" type="number" min="0" value="0" />
+          </label>
+        </div>
+        <label>
+          Content type
+          <input id="mock-content-type" type="text" placeholder="application/json" />
+        </label>
+        <label>
+          Headers (JSON object)
+          <textarea id="mock-headers" rows="3" placeholder='{"x-custom": "value"}'></textarea>
+        </label>
+        <label>
+          Body
+          <textarea id="mock-body" rows="6" placeholder='{"success": true}'></textarea>
+        </label>
+        <div class="form-actions">
+          <button type="submit">Save mock</button>
+          <button type="button" id="reset-form" class="secondary">Reset</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="logs" class="card">
+      <div class="section-header">
+        <h2>Recent Requests</h2>
+        <div>
+          <button id="refresh-logs">Refresh</button>
+          <label class="inline">
+            <input type="checkbox" id="auto-refresh" checked /> Auto refresh
+          </label>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table class="logs-table">
+          <thead>
+            <tr>
+              <th>Time (UTC)</th>
+              <th>Method</th>
+              <th>Path</th>
+              <th>Status</th>
+              <th>Source</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="logs-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="server-control" class="card">
+      <h2>Server Control</h2>
+      <button id="shutdown-button" class="danger">Stop Server</button>
+      <p class="hint">Shutdown will stop the mock server process. You will need to restart it manually.</p>
+    </section>
+  </main>
+
+  <template id="log-row-template">
+    <tr>
+      <td class="log-time"></td>
+      <td class="log-method"><span class="method-pill"></span></td>
+      <td class="log-path"><code></code></td>
+      <td class="log-status"><span class="badge"></span></td>
+      <td class="log-source"><span class="badge"></span></td>
+      <td>
+        <details>
+          <summary>View</summary>
+          <div class="details-grid">
+            <div>
+              <h4>Request Headers</h4>
+              <pre class="log-request-headers"></pre>
+              <h4>Request Body</h4>
+              <pre class="log-request-body"></pre>
+            </div>
+            <div>
+              <h4>Response Headers</h4>
+              <pre class="log-response-headers"></pre>
+              <h4>Response Body</h4>
+              <pre class="log-response-body"></pre>
+            </div>
+          </div>
+        </details>
+      </td>
+    </tr>
+  </template>
+
+  <script src="/dashboard/app.js" type="module"></script>
+</body>
+</html>
