@@ -72,18 +72,36 @@
             <input id="mock-delay" type="number" min="0" value="0" />
           </label>
         </div>
-        <label>
-          Content type
-          <input id="mock-content-type" type="text" placeholder="application/json" />
-        </label>
-        <label>
-          Headers (JSON object)
-          <textarea id="mock-headers" rows="3" placeholder='{"x-custom": "value"}'></textarea>
-        </label>
-        <label>
-          Body
-          <textarea id="mock-body" rows="6" placeholder='{"success": true}'></textarea>
-        </label>
+        <details class="collapsible" open>
+          <summary>Response headers</summary>
+          <div class="headers-editor">
+            <div class="headers-toolbar">
+              <span class="hint">Add key/value pairs to send custom response headers.</span>
+              <button type="button" id="add-header" class="secondary small">Add header</button>
+            </div>
+            <div id="headers-empty" class="empty-state">No headers configured yet.</div>
+            <div id="mock-headers-list" class="key-value-list" aria-live="polite"></div>
+          </div>
+        </details>
+        <details class="collapsible" open>
+          <summary>Response body</summary>
+          <div class="body-editor">
+            <label>
+              Content type
+              <input id="mock-content-type" type="text" placeholder="application/json" />
+            </label>
+            <div class="field-actions">
+              <label class="inline">
+                <input type="checkbox" id="mock-body-json" /> Treat body as JSON
+              </label>
+              <button type="button" id="format-body" class="secondary small">Format JSON</button>
+            </div>
+            <label>
+              Body
+              <textarea id="mock-body" rows="6" placeholder='{"success": true}'></textarea>
+            </label>
+          </div>
+        </details>
         <div class="form-actions">
           <button type="submit">Save mock</button>
           <button type="button" id="reset-form" class="secondary">Reset</button>

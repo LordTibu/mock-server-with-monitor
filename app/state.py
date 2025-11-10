@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import json
+import logging
 import uuid
-from typing import Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional
 
 from fastapi import HTTPException
 
@@ -11,8 +14,12 @@ from .models import MockCreate, MockDefinition, MockUpdate, ProxySettings, Reque
 
 
 class MockStore:
-    def __init__(self) -> None:
+    def __init__(self, storage_path: Optional[Path] = None) -> None:
         self._mocks: Dict[str, MockDefinition] = {}
+        self._storage_path = storage_path
+        if self._storage_path is not None:
+            self._storage_path.parent.mkdir(parents=True, exist_ok=True)
+            self._load()
 
     def list(self) -> List[MockDefinition]:
         return list(self._mocks.values())
@@ -32,6 +39,7 @@ class MockStore:
         mock_id = self._build_key(data["method"], data["path"])
         definition = MockDefinition(id=mock_id, **data)
         self._mocks[mock_id] = definition
+        self._persist()
         return definition
 
     def update(self, mock_id: str, payload: MockUpdate) -> MockDefinition:
@@ -46,17 +54,51 @@ class MockStore:
         if new_id != mock_id:
             self._mocks.pop(mock_id, None)
         self._mocks[new_id] = updated
+        self._persist()
         return updated
 
     def delete(self, mock_id: str) -> None:
         self._mocks.pop(mock_id, None)
+        self._persist()
 
     def clear(self) -> None:
         self._mocks.clear()
+        self._persist()
 
     @staticmethod
     def _build_key(method: str, path: str) -> str:
         return f"{method.upper()}::{path}"
+
+    def _load(self) -> None:
+        if self._storage_path is None or not self._storage_path.exists():
+            return
+        try:
+            data = json.loads(self._storage_path.read_text())
+        except (json.JSONDecodeError, OSError) as error:
+            logging.warning("Failed to load mocks from %s: %s", self._storage_path, error)
+            return
+        if not isinstance(data, list):
+            logging.warning("Invalid mock storage format in %s", self._storage_path)
+            return
+        for item in data:
+            try:
+                definition = MockDefinition(**item)
+            except Exception as error:  # pragma: no cover - defensive
+                logging.warning("Skipping invalid mock definition in %s: %s", self._storage_path, error)
+                continue
+            self._mocks[definition.id] = definition
+
+    def _persist(self) -> None:
+        if self._storage_path is None:
+            return
+        try:
+            payload: Iterable[Dict[str, object]] = (
+                definition.dict()
+                for definition in sorted(self._mocks.values(), key=lambda mock: mock.id)
+            )
+            self._storage_path.write_text(json.dumps(list(payload), indent=2))
+        except OSError as error:  # pragma: no cover - defensive
+            logging.error("Failed to persist mocks to %s: %s", self._storage_path, error)
 
 
 class RequestLogStore:
@@ -100,10 +142,14 @@ class RequestLogStore:
 
 
 class ServerState:
-    def __init__(self) -> None:
-        self.mocks = MockStore()
+    def __init__(self, storage_dir: Optional[Path] = None) -> None:
+        self._storage_dir = storage_dir or Path("data")
+        self._storage_dir.mkdir(parents=True, exist_ok=True)
+        self._proxy_settings_path = self._storage_dir / "proxy_settings.json"
+
+        self.mocks = MockStore(self._storage_dir / "mocks.json")
         self.logs = RequestLogStore()
-        self.proxy_settings = ProxySettings()
+        self.proxy_settings = self._load_proxy_settings()
         self.shutdown_event: Optional[asyncio.Event] = None
 
     def set_shutdown_event(self, event: asyncio.Event) -> None:
@@ -113,3 +159,40 @@ class ServerState:
         if self.shutdown_event is None:
             raise HTTPException(status_code=500, detail="Shutdown event not configured")
         self.shutdown_event.set()
+
+    def update_proxy_settings(self, payload: ProxySettings) -> ProxySettings:
+        self.proxy_settings = payload
+        self._persist_proxy_settings()
+        return self.proxy_settings
+
+    def _load_proxy_settings(self) -> ProxySettings:
+        if not self._proxy_settings_path.exists():
+            return ProxySettings()
+        try:
+            data = json.loads(self._proxy_settings_path.read_text())
+        except (json.JSONDecodeError, OSError) as error:
+            logging.warning(
+                "Failed to load proxy settings from %s: %s", self._proxy_settings_path, error
+            )
+            return ProxySettings()
+        try:
+            return ProxySettings(**data)
+        except Exception as error:  # pragma: no cover - defensive
+            logging.warning(
+                "Invalid proxy settings in %s. Using defaults. Error: %s",
+                self._proxy_settings_path,
+                error,
+            )
+            return ProxySettings()
+
+    def _persist_proxy_settings(self) -> None:
+        try:
+            self._proxy_settings_path.write_text(
+                json.dumps(self.proxy_settings.dict(), indent=2)
+            )
+        except OSError as error:  # pragma: no cover - defensive
+            logging.error(
+                "Failed to persist proxy settings to %s: %s",
+                self._proxy_settings_path,
+                error,
+            )
