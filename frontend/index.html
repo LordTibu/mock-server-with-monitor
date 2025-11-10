@@ -28,20 +28,18 @@
         <h2>Mocked Routes</h2>
         <button id="new-mock">New mock</button>
       </div>
-      <div class="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>Method</th>
-              <th>Path</th>
-              <th>Status</th>
-              <th>Delay (ms)</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="mock-table-body"></tbody>
-        </table>
-      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Status</th>
+            <th>Delay (ms)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="mock-table-body"></tbody>
+      </table>
     </section>
 
     <section id="mock-editor" class="card">
@@ -103,21 +101,19 @@
           </label>
         </div>
       </div>
-      <div class="table-wrapper">
-        <table class="logs-table">
-          <thead>
-            <tr>
-              <th>Time (UTC)</th>
-              <th>Method</th>
-              <th>Path</th>
-              <th>Status</th>
-              <th>Source</th>
-              <th>Details</th>
-            </tr>
-          </thead>
-          <tbody id="logs-body"></tbody>
-        </table>
-      </div>
+      <table class="logs-table">
+        <thead>
+          <tr>
+            <th>Time (UTC)</th>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Status</th>
+            <th>Source</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody id="logs-body"></tbody>
+      </table>
     </section>
 
     <section id="server-control" class="card">
@@ -130,10 +126,10 @@
   <template id="log-row-template">
     <tr>
       <td class="log-time"></td>
-      <td class="log-method"><span class="method-pill"></span></td>
-      <td class="log-path"><code></code></td>
-      <td class="log-status"><span class="badge"></span></td>
-      <td class="log-source"><span class="badge"></span></td>
+      <td class="log-method"></td>
+      <td class="log-path"></td>
+      <td class="log-status"></td>
+      <td class="log-source"></td>
       <td>
         <details>
           <summary>View</summary>

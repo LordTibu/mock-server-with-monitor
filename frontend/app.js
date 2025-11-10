@@ -72,80 +72,25 @@ function populateMockForm(mock) {
   editorTitle.textContent = "Edit mock";
 }
 
-function getStatusBadgeClass(status) {
-  if (status >= 200 && status < 300) {
-    return "status-success";
-  }
-  if (status >= 300 && status < 400) {
-    return "status-warning";
-  }
-  if (status >= 400) {
-    return "status-error";
-  }
-  return "";
-}
-
-function getSourceBadgeClass(source) {
-  const normalized = (source || "").toLowerCase();
-  if (normalized.includes("mock")) {
-    return "source-mock";
-  }
-  if (normalized.includes("proxy")) {
-    return "source-proxy";
-  }
-  return "source-live";
-}
-
 function createMockRow(mock) {
   const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td>${mock.method}</td>
+    <td><code>${mock.path}</code></td>
+    <td>${mock.status_code}</td>
+    <td>${mock.delay_ms}</td>
+    <td class="table-actions">
+      <button data-action="edit">Edit</button>
+      <button data-action="delete" class="secondary">Delete</button>
+    </td>
+  `;
 
-  const methodCell = document.createElement("td");
-  const methodPill = document.createElement("span");
-  const method = (mock.method || "").toUpperCase();
-  methodPill.className = `method-pill ${method}`.trim();
-  methodPill.textContent = method;
-  methodCell.appendChild(methodPill);
-  tr.appendChild(methodCell);
-
-  const pathCell = document.createElement("td");
-  const pathCode = document.createElement("code");
-  pathCode.textContent = mock.path;
-  pathCell.appendChild(pathCode);
-  tr.appendChild(pathCell);
-
-  const statusCell = document.createElement("td");
-  const statusBadge = document.createElement("span");
-  statusBadge.className = `badge ${getStatusBadgeClass(mock.status_code)}`.trim();
-  statusBadge.textContent = mock.status_code;
-  statusCell.appendChild(statusBadge);
-  tr.appendChild(statusCell);
-
-  const delayCell = document.createElement("td");
-  delayCell.textContent = mock.delay_ms ?? 0;
-  tr.appendChild(delayCell);
-
-  const actionsCell = document.createElement("td");
-  actionsCell.classList.add("table-actions");
-
-  const editButton = document.createElement("button");
-  editButton.dataset.action = "edit";
-  editButton.textContent = "Edit";
-  actionsCell.appendChild(editButton);
-
-  const deleteButton = document.createElement("button");
-  deleteButton.dataset.action = "delete";
-  deleteButton.classList.add("secondary");
-  deleteButton.textContent = "Delete";
-  actionsCell.appendChild(deleteButton);
-
-  tr.appendChild(actionsCell);
-
-  editButton.addEventListener("click", () => {
+  tr.querySelector('[data-action="edit"]').addEventListener("click", () => {
     populateMockForm(mock);
     window.scrollTo({ top: mockForm.offsetTop - 20, behavior: "smooth" });
   });
 
-  deleteButton.addEventListener("click", async () => {
+  tr.querySelector('[data-action="delete"]').addEventListener("click", async () => {
     if (!confirm(`Delete mock ${mock.method} ${mock.path}?`)) {
       return;
     }
@@ -177,65 +122,26 @@ function formatTimestamp(value) {
   return date.toISOString().replace("T", " ").replace("Z", "");
 }
 
-function renderLog(entry, openLogIds) {
+function renderLog(entry) {
   const fragment = logTemplate.content.cloneNode(true);
-  const row = fragment.querySelector("tr");
-  row.dataset.logId = entry.id;
-
   fragment.querySelector(".log-time").textContent = formatTimestamp(entry.timestamp);
-
-  const methodPill = fragment.querySelector(".log-method .method-pill");
-  const method = (entry.method || "").toUpperCase();
-  methodPill.textContent = method;
-  methodPill.classList.add(method);
-
-  fragment.querySelector(".log-path code").textContent = entry.path;
-
-  const statusBadge = fragment.querySelector(".log-status .badge");
-  statusBadge.textContent = entry.status_code;
-  const statusClass = getStatusBadgeClass(entry.status_code);
-  if (statusClass) {
-    statusBadge.classList.add(statusClass);
-  }
-
-  const sourceBadge = fragment.querySelector(".log-source .badge");
-  sourceBadge.textContent = entry.source;
-  const sourceClass = getSourceBadgeClass(entry.source);
-  if (sourceClass) {
-    sourceBadge.classList.add(sourceClass);
-  }
-
+  fragment.querySelector(".log-method").textContent = entry.method;
+  fragment.querySelector(".log-path").textContent = entry.path;
+  fragment.querySelector(".log-status").textContent = entry.status_code;
+  fragment.querySelector(".log-source").textContent = entry.source;
   fragment.querySelector(".log-request-headers").textContent = JSON.stringify(entry.request_headers || {}, null, 2);
-  fragment.querySelector(".log-request-body").textContent = entry.request_body ?? "";
+  fragment.querySelector(".log-request-body").textContent = entry.request_body || "";
   fragment.querySelector(".log-response-headers").textContent = JSON.stringify(entry.response_headers || {}, null, 2);
-  fragment.querySelector(".log-response-body").textContent = entry.response_body ?? "";
-
-  if (openLogIds?.has(entry.id)) {
-    fragment.querySelector("details").setAttribute("open", "open");
-  }
-
+  fragment.querySelector(".log-response-body").textContent = entry.response_body || "";
   return fragment;
 }
 
-function getOpenLogIds() {
-  return new Set(
-    Array.from(logsBody.querySelectorAll("tr[data-log-id]")).flatMap((row) => {
-      const details = row.querySelector("details");
-      if (details && details.open) {
-        return row.dataset.logId ? [row.dataset.logId] : [];
-      }
-      return [];
-    }),
-  );
-}
-
 async function loadLogs() {
-  const openLogIds = getOpenLogIds();
   try {
     const entries = await fetchJson("/logs");
     logsBody.innerHTML = "";
     entries.forEach((entry) => {
-      logsBody.appendChild(renderLog(entry, openLogIds));
+      logsBody.appendChild(renderLog(entry));
     });
   } catch (error) {
     console.error("Failed to load logs", error);
